@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>unchaos — Architecture Planner</title>
+  
+  <!-- Premium Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@100;200;300;400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & Babel CDNs -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js');
+    });
+  }
+</script>
+
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background-color: #0b0c10;
+    }
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 2px;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+    }
+    textarea {
+      resize: none;
+    }
+  </style>
+</head>
+<body class="p-4 md:p-6 min-h-screen flex items-center justify-center">
+
+  <div id="root" class="w-full max-w-[1500px]"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Local Storage Mock Engine 
+    if (typeof window !== "undefined" && !window.storage) {
+      window.storage = {
+        get: async (key) => {
+          const val = localStorage.getItem(key);
+          return val ? { value: val } : null;
+        },
+        set: async (key, value) => {
+          localStorage.setItem(key, value);
+        }
+      };
+    }
+
+    // High Fidelity Audio feedback for checking nodes
+    const playSynthesizedTone = (type = "success") => {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        
+        if (type === "success") {
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(600, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.015, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+        } else {
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(150, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.02, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+        }
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.1);
+      } catch (e) {}
+    };
+
+    const THEMES = {
+      studio: {
+        bg: "#0d0e12", 
+        outerFrame: "bg-[#181920] border-zinc-800",
+        panelHeader: "bg-black text-white",
+        panelBody: "bg-[#e5e7eb] text-black border-zinc-300",
+        subCard: "bg-[#f3f4f6] border-[#cbd5e1]",
+        accent: "#000000",
+        accentMuted: "#9ca3af",
+        text: "text-zinc-950",
+        name: "Studio Mono",
+      },
+      darkGlass: {
+        bg: "#050505", 
+        outerFrame: "bg-zinc-950 border-zinc-900",
+        panelHeader: "bg-zinc-900 text-zinc-100",
+        panelBody: "bg-zinc-900/60 text-zinc-100 border-zinc-800",
+        subCard: "bg-zinc-800/40 border-zinc-700/60",
+        accent: "#ffffff",
+        accentMuted: "#4b5563",
+        text: "text-zinc-100",
+        name: "Dark Glass",
+      },
+    };
+
+    const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const DAY_KEYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    function getMonday(d) {
+      const date = new Date(d);
+      const day = date.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      date.setDate(date.getDate() + diff);
+      date.setHours(0, 0, 0, 0);
+      return date;
+    }
+
+    function addDays(date, n) {
+      const d = new Date(date);
+      d.setDate(d.getDate() + n);
+      return d;
+    }
+
+    function fmtDate(date) {
+      return date.toLocaleDateString("en-US", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, '.');
+    }
+
+    function weekKey(monday) {
+      return monday.toISOString().split("T")[0];
+    }
+
+    // Precise circular indicator matching high contrast designs
+    function CrispProgressRing({ pct, size = 65, stroke = 8, color = "#000000", bg = "#cbd5e1" }) {
+      const r = (size - stroke) / 2;
+      const circ = 2 * Math.PI * r;
+      const offset = circ - (pct / 100) * circ;
+      return (
+        <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={bg} strokeWidth={stroke} />
+          <circle
+            cx={size / 2} cy={size / 2} r={r} fill="none"
+            stroke={color} strokeWidth={stroke}
+            strokeDasharray={circ} strokeDashoffset={offset}
+            strokeLinecap="butt"
+            style={{ transition: "stroke-dashoffset 0.5s ease" }}
+          />
+        </svg>
+      );
+    }
+
+    function App() {
+      const [theme, setTheme] = useState("studio");
+      const [weekStart, setWeekStart] = useState(getMonday(new Date()));
+      const [focus, setFocus] = useState("");
+      const [reward, setReward] = useState("");
+      const [affirmation, setAffirmation] = useState("");
+      const [tasks, setTasks] = useState({});
+      const [newTask, setNewTask] = useState({});
+      const [history, setHistory] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [saveMsg, setSaveMsg] = useState("");
+
+      const t = THEMES[theme];
+      const wk = weekKey(weekStart);
+
+      useEffect(() => {
+        (async () => {
+          try { const r = await window.storage.get("up_theme"); if (r) setTheme(r.value); } catch {}
+          try { const r = await window.storage.get("up_history"); if (r) setHistory(JSON.parse(r.value)); } catch {}
+          setLoading(false);
+        })();
+      }, []);
+
+      useEffect(() => {
+        if (loading) return;
+        (async () => {
+          try {
+            const r = await window.storage.get(`up_week_${wk}`);
+            if (r) {
+              const d = JSON.parse(r.value);
+              setFocus(d.focus || ""); setReward(d.reward || ""); setAffirmation(d.affirmation || "");
+              setTasks(d.tasks || {});
+            } else {
+              setFocus(""); setReward(""); setAffirmation(""); setTasks({}); 
+            }
+          } catch { setFocus(""); setReward(""); setAffirmation(""); setTasks({}); }
+        })();
+      }, [wk, loading]);
+
+      useEffect(() => {
+        if (loading) return;
+        window.storage.set(`up_week_${wk}`, JSON.stringify({ focus, reward, affirmation, tasks })).catch(() => {});
+      }, [focus, reward, affirmation, tasks, wk, loading]);
+
+      useEffect(() => {
+        if (!loading) window.storage.set("up_theme", theme).catch(() => {});
+      }, [theme, loading]);
+
+      const addTask = (day) => {
+        const text = (newTask[day] || "").trim();
+        if (!text) return;
+        setTasks(p => ({ ...p, [day]: [...(p[day] || []), { id: Date.now() + Math.random(), text, done: false }] }));
+        setNewTask(p => ({ ...p, [day]: "" }));
+        playSynthesizedTone("success");
+      };
+
+      const toggleTask = (day, id) => {
+        setTasks(p => ({ ...p, [day]: p[day].map(x => x.id === id ? { ...x, done: !x.done } : x) }));
+        playSynthesizedTone("success");
+      };
+
+      const deleteTask = (day, id) => {
+        setTasks(p => ({ ...p, [day]: p[day].filter(x => x.id !== id) }));
+        playSynthesizedTone("remove");
+      };
+
+      // ───────────────────────────────────────────
+      // COMPACT AND RELIABLE TASK PERCENTAGE INDEX
+      // ───────────────────────────────────────────
+      const totalTasks = DAYS.reduce((s, d) => s + (tasks[d]?.length || 0), 0);
+      const doneTasks = DAYS.reduce((s, d) => s + (tasks[d]?.filter(x => x.done).length || 0), 0);
+      const overallPct = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+      const dailyData = DAYS.map((d, i) => ({
+        day: d,
+        Total: tasks[d]?.length || 0,
+        Done: tasks[d]?.filter(x => x.done).length || 0,
+      }));
+
+      const saveWeek = async () => {
+        const entry = { wk, weekStart: weekStart.toISOString(), focus, reward, affirmation, tasks, taskPct: overallPct, savedAt: new Date().toISOString() };
+        const nh = [entry, ...history.filter(h => h.wk !== wk)].slice(0, 20);
+        setHistory(nh);
+        await window.storage.set("up_history", JSON.stringify(nh)).catch(() => {});
+        setSaveMsg("Cycle Locked"); setTimeout(() => setSaveMsg(""), 3000);
+      };
+
+      const resetWeek = () => {
+        if (!confirm("Clear this week's active alignments?")) return;
+        setFocus(""); setReward(""); setAffirmation(""); setTasks({});
+      };
+
+      if (loading) {
+        return (
+          <div className="min-h-screen flex items-center justify-center font-mono tracking-widest text-zinc-400 text-xs">
+            CALIBRATING METRIC SYSTEM...
+          </div>
+        );
+      }
+
+      return (
+        <div className={`rounded-[32px] p-6 border-8 shadow-2xl transition-all duration-300 ${t.outerFrame}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          
+          {/* Top Title Bar & Control Center */}
+          <div className="flex flex-col lg:flex-row gap-4 mb-6">
+            
+            {/* Left Box: Control Board */}
+            <div className="w-full lg:w-[30%] flex flex-col gap-3 p-4 rounded-xl border" style={{ backgroundColor: t.subCard.split(" ")[0], borderColor: t.border }}>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-wider font-semibold opacity-65">Theme Configuration</span>
+                <div className="flex gap-1">
+                  {Object.entries(THEMES).map(([k, v]) => (
+                    <button 
+                      key={k} 
+                      className={`px-2 py-0.5 text-[9px] font-mono rounded transition-all ${theme === k ? 'bg-black text-white' : 'bg-zinc-200 text-zinc-600'}`}
+                      onClick={() => setTheme(k)}
+                    >
+                      {v.name.split(" ")[0]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-dashed my-1" style={{ borderColor: t.border }}></div>
+
+              <div>
+                <div className="text-xs font-semibold py-1 px-3 bg-black text-white text-center rounded-t">Start of the week ✔</div>
+                <div className="bg-white text-black py-2 text-center border font-mono text-[11px] font-bold tracking-wider rounded-b">
+                  {fmtDate(weekStart)}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <button className="py-2 bg-[#2d3748] text-white hover:bg-black font-mono text-[10px] uppercase tracking-wider rounded font-bold transition-all" onClick={saveWeek}>
+                  Save 💾
+                </button>
+                <button className="py-2 bg-[#4a5568] text-white hover:bg-black font-mono text-[10px] uppercase tracking-wider rounded font-bold transition-all" onClick={resetWeek}>
+                  Clear 🔄
+                </button>
+              </div>
+            </div>
+
+            {/* Middle Box: Focus, Reward, Affirmation */}
+            <div className="w-full lg:w-[38%] flex flex-col gap-2 p-3 rounded-xl border" style={{ backgroundColor: t.subCard.split(" ")[0], borderColor: t.border }}>
+              <div>
+                <div className="text-[10px] font-bold py-1 px-2.5 bg-black text-white text-center rounded">Weekly focus 🎯</div>
+                <input 
+                  type="text" 
+                  className="w-full bg-white text-black border py-1.5 px-3 text-xs mt-1 font-medium text-center rounded placeholder:opacity-40" 
+                  value={focus} 
+                  onChange={e => setFocus(e.target.value)} 
+                  placeholder="Focus priority..." 
+                />
+              </div>
+
+              <div>
+                <div className="text-[10px] font-bold py-1 px-2.5 bg-black text-white text-center rounded">Reward 🏆</div>
+                <input 
+                  type="text" 
+                  className="w-full bg-white text-black border py-1.5 px-3 text-xs mt-1 font-medium text-center rounded placeholder:opacity-40" 
+                  value={reward} 
+                  onChange={e => setReward(e.target.value)} 
+                  placeholder="Target reward..." 
+                />
+              </div>
+
+              <div>
+                <div className="text-[10px] font-bold py-1 px-2.5 bg-black text-white text-center rounded">Affirmation 🧠</div>
+                <input 
+                  type="text" 
+                  className="w-full bg-white text-black border py-1.5 px-3 text-xs mt-1 font-medium text-center rounded placeholder:opacity-40" 
+                  value={affirmation} 
+                  onChange={e => setAffirmation(e.target.value)} 
+                  placeholder="One step at a time..." 
+                />
+              </div>
+            </div>
+
+            {/* Center Box: Overall Progress Analytics */}
+            <div className="w-full lg:w-[32%] flex flex-col p-4 rounded-xl border justify-between" style={{ backgroundColor: t.subCard.split(" ")[0], borderColor: t.border }}>
+              <div className="text-[10px] font-bold py-1 bg-black text-white text-center rounded">Overall Progress</div>
+              
+              <div className="flex items-center justify-between gap-4 py-2 h-full mt-1">
+                {/* Micro Bar Chart */}
+                <div className="flex items-end justify-between gap-1.5 h-16 flex-1 px-1">
+                  {DAYS.map((d, i) => {
+                    const dayTasks = tasks[d] || [];
+                    const maxVal = Math.max(...DAYS.map(day => tasks[day]?.length || 0), 1);
+                    const totalHeight = dayTasks.length ? (dayTasks.length / maxVal) * 100 : 0;
+                    const doneHeight = dayTasks.filter(x => x.done).length ? (dayTasks.filter(x => x.done).length / maxVal) * 100 : 0;
+                    
+                    return (
+                      <div key={d} className="flex-1 flex flex-col justify-end h-full relative group">
+                        <div className="w-full bg-zinc-300 relative rounded-sm" style={{ height: `${Math.max(totalHeight, 10)}%` }}>
+                          <div className="absolute bottom-0 w-full bg-black rounded-sm" style={{ height: `${doneHeight}%` }}></div>
+                        </div>
+                        <span className="text-[8px] font-mono text-center block mt-1 scale-90">{DAY_KEYS[i]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Main Progress Ring */}
+                <div className="flex flex-col items-center shrink-0">
+                  <div className="relative flex items-center justify-center">
+                    <CrispProgressRing pct={overallPct} size={65} stroke={6} color="#000000" bg="#cbd5e1" />
+                    <span className="absolute text-[11px] font-mono font-bold">{overallPct}%</span>
+                  </div>
+                  <span className="text-[9px] font-mono tracking-tight mt-1 opacity-65 font-bold">
+                    {doneTasks}/{totalTasks} completed
+                  </span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* 7-Day Matrix Grid matching image_e43622.png */}
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+            {DAYS.map((day, idx) => {
+              const date = addDays(weekStart, idx);
+              const dayTasks = tasks[day] || [];
+              const totalCount = dayTasks.length;
+              const doneCount = dayTasks.filter(x => x.done).length;
+              const leftCount = totalCount - doneCount;
+              const dayPct = totalCount ? Math.round((doneCount / totalCount) * 100) : 0;
+              
+              return (
+                <div key={day} className="flex flex-col border rounded-xl overflow-hidden shadow-sm animate-fade-in" style={{ backgroundColor: t.panelBody.split(" ")[0], borderColor: t.border }}>
+                  
+                  {/* Day Header */}
+                  <div className="bg-black text-white py-2 text-center shrink-0">
+                    <h2 className="font-serif text-[13px] font-bold tracking-wide">{day}</h2>
+                    <span className="text-[9px] opacity-60 font-mono block mt-0.5">{fmtDate(date)}</span>
+                  </div>
+
+                  {/* High Contrast Circle Progress Widget */}
+                  <div className="flex flex-col items-center py-4 bg-white border-b" style={{ borderColor: t.border }}>
+                    <div className="relative flex items-center justify-center">
+                      <CrispProgressRing pct={dayPct} size={70} stroke={6} color="#000000" bg="#e2e8f0" />
+                      <span className="absolute text-[12px] font-mono font-bold text-black">{dayPct}%</span>
+                    </div>
+                  </div>
+
+                  {/* Sub Header label */}
+                  <div className="bg-black text-white py-1 text-center font-mono text-[9px] uppercase tracking-widest font-bold">
+                    Tasks
+                  </div>
+
+                  {/* Task alignment grid list */}
+                  <div className="flex-1 min-h-[220px] max-h-[320px] overflow-y-auto custom-scroll p-2 space-y-1 bg-[#f3f4f6]">
+                    {dayTasks.map(task => (
+                      <div key={task.id} className="flex items-center justify-between gap-1.5 bg-white border p-1.5 rounded shadow-sm hover:border-black transition-all group">
+                        <span className={`text-[10.5px] font-medium leading-tight break-words flex-1 ${task.done ? 'line-through text-zinc-400 font-light' : 'text-zinc-950'}`}>
+                          {task.text}
+                        </span>
+                        
+                        <div className="flex items-center gap-1">
+                          {/* Trash indicator */}
+                          <button 
+                            className="opacity-0 group-hover:opacity-100 text-[10px] text-zinc-400 hover:text-black transition-opacity" 
+                            onClick={() => deleteTask(day, task.id)}
+                          >
+                            🗑
+                          </button>
+                          
+                          {/* Check trigger */}
+                          <div 
+                            onClick={() => toggleTask(day, task.id)}
+                            className={`w-4 h-4 border text-[10px] font-bold flex items-center justify-center cursor-pointer rounded transition-all ${task.done ? 'bg-black text-white border-black' : 'bg-zinc-50 text-transparent border-zinc-300'}`}
+                          >
+                            ✓
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Inline quick alignment vector input */}
+                  <div className="p-2 border-t bg-white" style={{ borderColor: t.border }}>
+                    <div className="flex items-center gap-1.5">
+                      <input 
+                        type="text" 
+                        placeholder="Commit aligns..."
+                        className="flex-1 bg-zinc-50 border text-[10.5px] py-1 px-2 rounded placeholder:opacity-30"
+                        value={newTask[day] || ""}
+                        onChange={e => setNewTask(p => ({ ...p, [day]: e.target.value }))}
+                        onKeyDown={e => e.key === "Enter" && addTask(day)}
+                      />
+                      <button className="text-sm font-bold text-zinc-400 hover:text-black" onClick={() => addTask(day)}>+</button>
+                    </div>
+                  </div>
+
+                  {/* Done / Left Analytic meters matching image_e43622.png */}
+                  <div className="p-3 border-t bg-white space-y-2 shrink-0 font-mono text-[9px]" style={{ borderColor: t.border }}>
+                    {/* Done Meter */}
+                    <div>
+                      <div className="flex justify-between items-center mb-0.5 text-zinc-800">
+                        <span className="font-bold">Done</span>
+                        <span className="font-mono text-zinc-500 font-bold">{doneCount}</span>
+                      </div>
+                      <div className="h-2 w-full bg-zinc-100 rounded overflow-hidden">
+                        <div className="bg-black h-full rounded transition-all duration-500" style={{ width: `${totalCount ? (doneCount/totalCount)*100 : 0}%` }}></div>
+                      </div>
+                    </div>
+
+                    {/* Left Meter */}
+                    <div>
+                      <div className="flex justify-between items-center mb-0.5 text-zinc-800">
+                        <span className="font-bold">Left</span>
+                        <span className="font-mono text-zinc-500 font-bold">{leftCount}</span>
+                      </div>
+                      <div className="h-2 w-full bg-zinc-100 rounded overflow-hidden">
+                        <div className="bg-[#cbd5e1] h-full rounded transition-all duration-500" style={{ width: `${totalCount ? (leftCount/totalCount)*100 : 0}%` }}></div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
+
+        </div>
+      );
+    }
+
+    const container = document.getElementById('root');
+    const root = ReactDOM.createRoot(container);
+    root.render(<App />);
+  </script>
+</body>
+</html>
