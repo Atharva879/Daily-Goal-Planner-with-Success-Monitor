@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Weekly Planner - Unchaos Sage Studio</title>
   
+  <!-- PWA Manifest & Mobile Config -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4a704a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3209/3209265.png">
+
   <!-- Premium Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Playfair+Display:ital,wght=0,600;1,600&display=swap" rel="stylesheet">
   
@@ -69,6 +76,17 @@
       background: #4a704a;
     }
   </style>
+
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Offline Engine Active:', reg.scope))
+          .catch(err => console.log('Offline Engine Failed:', err));
+      });
+    }
+  </script>
 </head>
 <body class="custom-scrollbar">
 
@@ -97,19 +115,19 @@
     function getMonday(d) {
       const date = new Date(d);
       const day = date.getDay();
-      // Adjust offset to find previous Monday (Monday is day 1, Sunday is 0)
       const diff = day === 0 ? -6 : 1 - day;
       date.setDate(date.getDate() + diff);
       date.setHours(0, 0, 0, 0);
       return date;
     }
 
-    function addDays(date, n) {
-      const d = new Date(date);
-      d.setDate(d.getDate() + n);
-      return d;
+    function getWeekDate(monday, idx) {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + idx);
+      return date;
     }
 
+    // Adjust format dynamically based on user preferences
     function fmtDate(date) {
       const dd = String(date.getDate()).padStart(2, '0');
       const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -117,7 +135,6 @@
       return `${dd}.${mm}.${yyyy}`;
     }
 
-    // Timezone safe helper to get YYYY-MM-DD from local date
     function getLocalYMD(date) {
       const yyyy = date.getFullYear();
       const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -125,7 +142,6 @@
       return `${yyyy}-${mm}-${dd}`;
     }
 
-    // High fidelity circular ring matching Google Sheets donut charts
     function CircularDonut({ pct, size = 76, strokeWidth = 8 }) {
       const radius = (size - strokeWidth) / 2;
       const circumference = 2 * Math.PI * radius;
@@ -163,7 +179,7 @@
       const [reward, setReward] = useState("Movie night, no guilt 🍿");
       const [affirmation, setAffirmation] = useState("Progress over perfection. ✨");
 
-      // Initializing tasks
+      // Initializing default tasks
       const [tasks, setTasks] = useState({
         "Monday": [
           { id: 8, text: "Secondary work task", done: true },
@@ -238,7 +254,6 @@
         saveToLocal();
       }, [focus, reward, affirmation, tasks, habits]);
 
-      // Adjusting start of the week via date input
       const handleDateChange = (dateString) => {
         if (!dateString) return;
         const selectedDate = new Date(dateString);
@@ -246,11 +261,17 @@
         setWeekStart(calculatedMonday);
       };
 
-      // Navigation weeks
-      const handlePrevWeek = () => setWeekStart(d => addDays(d, -7));
-      const handleNextWeek = () => setWeekStart(d => addDays(d, 7));
+      const handlePrevWeek = () => setWeekStart(d => {
+        const next = new Date(d);
+        next.setDate(d.getDate() - 7);
+        return next;
+      });
+      const handleNextWeek = () => setWeekStart(d => {
+        const next = new Date(d);
+        next.setDate(d.getDate() + 7);
+        return next;
+      });
 
-      // Task actions
       const handleAddTask = (day) => {
         const txt = (newTaskInputs[day] || "").trim();
         if (!txt) return;
@@ -275,7 +296,6 @@
         }));
       };
 
-      // Habit actions
       const handleToggleHabitDay = (habitId, dayIdx) => {
         setHabits(prev => prev.map(h => {
           if (h.id === habitId) {
@@ -311,7 +331,6 @@
         }
       };
 
-      // Metrics calculation
       const totalTasks = Object.values(tasks).reduce((acc, curr) => acc + curr.length, 0);
       const completedTasks = Object.values(tasks).reduce((acc, curr) => acc + curr.filter(t => t.done).length, 0);
       const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -559,10 +578,10 @@
               </div>
             </div>
 
-            {/* 7-Day Architecture Columns (Adaptive layout: 1 Column on Mobile -> 2 on Tablet -> 7 on Desktop) */}
+            {/* 7-Day Architecture Columns */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
               {DAYS.map((day, idx) => {
-                const targetDate = addDays(weekStart, idx);
+                const targetDate = getWeekDate(weekStart, idx);
                 const dayTasks = tasks[day] || [];
                 const totalCount = dayTasks.length;
                 const doneCount = dayTasks.filter(t => t.done).length;
