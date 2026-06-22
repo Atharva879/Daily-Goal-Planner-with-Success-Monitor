@@ -5,20 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Weekly Planner - Unchaos Sage Studio</title>
   
-  <!-- PWA Manifest & Mobile Config -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#4a704a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3209/3209265.png">
 
-  <!-- Premium Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Playfair+Display:ital,wght=0,600;1,600&display=swap" rel="stylesheet">
   
-  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- React & Babel CDNs -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -76,24 +72,13 @@
       background: #4a704a;
     }
   </style>
-
-  <!-- PWA Service Worker Registration -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .then(reg => console.log('Offline Engine Active:', reg.scope))
-          .catch(err => console.log('Offline Engine Failed:', err));
-      });
-    }
-  </script>
 </head>
 <body class="custom-scrollbar">
 
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     // Local Storage Mock Engine
     if (typeof window !== "undefined" && !window.storage) {
@@ -108,9 +93,21 @@
       };
     }
 
-    // Monday - Sunday Sequence
     const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
     const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    // Default static template to ensure clean state resets
+    const DEFAULT_HABITS = [
+      { id: 1, name: "Wake up at 6:30", days: [false, false, false, false, false, false, false] },
+      { id: 2, name: "Drink 2L of water", days: [false, false, false, false, false, false, false] },
+      { id: 3, name: "Cold shower", days: [false, false, false, false, false, false, false] },
+      { id: 4, name: "Gym", days: [false, false, false, false, false, false, false] },
+      { id: 5, name: "Reading 10 pages", days: [false, false, false, false, false, false, false] },
+      { id: 6, name: "Budget tracking", days: [false, false, false, false, false, false, false] },
+      { id: 7, name: "Studying", days: [false, false, false, false, false, false, false] },
+      { id: 8, name: "Meditation", days: [false, false, false, false, false, false, false] },
+      { id: 9, name: "No vape", days: [false, false, false, false, false, false, false] }
+    ];
 
     function getMonday(d) {
       const date = new Date(d);
@@ -127,7 +124,6 @@
       return date;
     }
 
-    // Adjust format dynamically based on user preferences
     function fmtDate(date) {
       const dd = String(date.getDate()).padStart(2, '0');
       const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -175,54 +171,31 @@
 
     function App() {
       const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
-      const [focus, setFocus] = useState("Finish the weekly report 📝");
-      const [reward, setReward] = useState("Movie night, no guilt 🍿");
-      const [affirmation, setAffirmation] = useState("Progress over perfection. ✨");
-
-      // Initializing default tasks
+      const [focus, setFocus] = useState("");
+      const [reward, setReward] = useState("");
+      const [affirmation, setAffirmation] = useState("");
       const [tasks, setTasks] = useState({
-        "Monday": [
-          { id: 8, text: "Secondary work task", done: true },
-          { id: 9, text: "Admin tasks", done: true },
-          { id: 10, text: "Clean kitchen", done: false }
-        ],
-        "Tuesday": [],
-        "Wednesday": [],
-        "Thursday": [],
-        "Friday": [],
-        "Saturday": [
-          { id: 1, text: "Deep work block", done: true },
-          { id: 2, text: "Review priorities", done: true },
-          { id: 3, text: "Gym / movement", done: true },
-          { id: 4, text: "Weekly finances", done: true }
-        ],
-        "Sunday": [
-          { id: 5, text: "Clean apartment", done: true },
-          { id: 6, text: "Gym / movement", done: false }
-        ]
+        "Monday": [], "Tuesday": [], "Wednesday": [], "Thursday": [], "Friday": [], "Saturday": [], "Sunday": []
       });
-
-      const [habits, setHabits] = useState([
-        { id: 1, name: "Wake up at 6:30", days: [true, true, true, true, true, true, false] },
-        { id: 2, name: "Drink 2L of water", days: [true, true, true, true, true, true, false] },
-        { id: 3, name: "Cold shower", days: [true, true, true, true, true, true, false] },
-        { id: 4, name: "Gym", days: [true, true, true, true, true, true, false] },
-        { id: 5, name: "Reading 10 pages", days: [true, true, true, true, true, true, false] },
-        { id: 6, name: "Budget tracking", days: [true, true, true, true, true, true, false] },
-        { id: 7, name: "Studying", days: [true, true, true, true, true, true, false] },
-        { id: 8, name: "Meditation", days: [true, true, true, true, true, true, false] },
-        { id: 9, name: "No vape", days: [true, true, true, true, true, true, false] }
-      ]);
+      const [habits, setHabits] = useState(DEFAULT_HABITS);
 
       const [newTaskInputs, setNewTaskInputs] = useState({});
       const [newHabitInput, setNewHabitInput] = useState("");
+      
+      // Mutual exclusion lock to block premature autosaves during initialization pipeline
+      const isInitialLoading = useRef(true);
 
-      // Automatically load saved state when weekStart changes
+      // Async Loader Engine
       useEffect(() => {
+        let isCurrentRequest = true;
+        isInitialLoading.current = true;
+
         (async () => {
           const wk = getLocalYMD(weekStart);
           try {
             const r = await window.storage.get(`unchaos_sheets_${wk}`);
+            if (!isCurrentRequest) return;
+
             if (r) {
               const d = JSON.parse(r.value);
               setFocus(d.focus || "");
@@ -231,34 +204,50 @@
               setTasks(d.tasks || {
                 "Monday": [], "Tuesday": [], "Wednesday": [], "Thursday": [], "Friday": [], "Saturday": [], "Sunday": []
               });
-              setHabits(d.habits || habits.map(h => ({ ...h, days: Array(7).fill(false) })));
+              setHabits(d.habits || DEFAULT_HABITS.map(h => ({ ...h, days: Array(7).fill(false) })));
             } else {
+              setFocus("");
+              setReward("");
+              setAffirmation("");
               setTasks({
                 "Monday": [], "Tuesday": [], "Wednesday": [], "Thursday": [], "Friday": [], "Saturday": [], "Sunday": []
               });
-              setHabits(habits.map(h => ({ ...h, days: Array(7).fill(false) })));
+              setHabits(DEFAULT_HABITS.map(h => ({ ...h, days: Array(7).fill(false) })));
             }
-          } catch (e) {}
+          } catch (e) {
+            console.error("Storage read drop:", e);
+          } finally {
+            if (isCurrentRequest) {
+              // Defer opening write gate to clear stack trace
+              setTimeout(() => { isInitialLoading.current = false; }, 50);
+            }
+          }
         })();
+
+        return () => { isCurrentRequest = false; };
       }, [weekStart]);
 
-      // Save state
-      const saveToLocal = async () => {
-        const wk = getLocalYMD(weekStart);
-        try {
-          await window.storage.set(`unchaos_sheets_${wk}`, JSON.stringify({ focus, reward, affirmation, tasks, habits }));
-        } catch (e) {}
-      };
-
+      // Atomic Autosave Engine
       useEffect(() => {
+        if (isInitialLoading.current) return;
+
+        const saveToLocal = async () => {
+          const wk = getLocalYMD(weekStart);
+          try {
+            await window.storage.set(`unchaos_sheets_${wk}`, JSON.stringify({ focus, reward, affirmation, tasks, habits }));
+          } catch (e) {
+            console.error("Storage lock failure:", e);
+          }
+        };
+
         saveToLocal();
-      }, [focus, reward, affirmation, tasks, habits]);
+      }, [focus, reward, affirmation, tasks, habits, weekStart]);
 
       const handleDateChange = (dateString) => {
         if (!dateString) return;
         const selectedDate = new Date(dateString);
-        const calculatedMonday = getMonday(selectedDate);
-        setWeekStart(calculatedMonday);
+        if (isNaN(selectedDate.getTime())) return;
+        setWeekStart(getMonday(selectedDate));
       };
 
       const handlePrevWeek = () => setWeekStart(d => {
@@ -277,7 +266,7 @@
         if (!txt) return;
         setTasks(prev => ({
           ...prev,
-          [day]: [...(prev[day] || []), { id: Date.now(), text: txt, done: false }]
+          [day]: [...(prev[day] || []), { id: Date.now() + Math.random(), text: txt, done: false }]
         }));
         setNewTaskInputs(prev => ({ ...prev, [day]: "" }));
       };
@@ -285,14 +274,14 @@
       const handleToggleTask = (day, id) => {
         setTasks(prev => ({
           ...prev,
-          [day]: prev[day].map(t => t.id === id ? { ...t, done: !t.done } : t)
+          [day]: (prev[day] || []).map(t => t.id === id ? { ...t, done: !t.done } : t)
         }));
       };
 
       const handleDeleteTask = (day, id) => {
         setTasks(prev => ({
           ...prev,
-          [day]: prev[day].filter(t => t.id !== id)
+          [day]: (prev[day] || []).filter(t => t.id !== id)
         }));
       };
 
@@ -312,7 +301,7 @@
         if (!txt) return;
         setHabits(prev => [
           ...prev,
-          { id: Date.now(), name: txt, days: Array(7).fill(false) }
+          { id: Date.now() + Math.random(), name: txt, days: Array(7).fill(false) }
         ]);
         setNewHabitInput("");
       };
@@ -324,21 +313,21 @@
       const handleClear = () => {
         if (confirm("Reset current week to defaults?")) {
           setTasks({ Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] });
-          setHabits(habits.map(h => ({ ...h, days: Array(7).fill(false) })));
+          setHabits(DEFAULT_HABITS.map(h => ({ ...h, days: Array(7).fill(false) })));
           setFocus("");
           setReward("");
           setAffirmation("");
         }
       };
 
-      const totalTasks = Object.values(tasks).reduce((acc, curr) => acc + curr.length, 0);
-      const completedTasks = Object.values(tasks).reduce((acc, curr) => acc + curr.filter(t => t.done).length, 0);
+      const totalTasks = Object.values(tasks).reduce((acc, curr) => acc + (curr ? curr.length : 0), 0);
+      const completedTasks = Object.values(tasks).reduce((acc, curr) => acc + (curr ? curr.filter(t => t.done).length : 0), 0);
       const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
       return (
         <div className="min-h-screen text-sheets-text flex flex-col font-sans select-none pb-12">
           
-          {/* Header Branding Panel (Responsive Layout) */}
+          {/* Header Branding Panel */}
           <div className="bg-[#4a704a] text-white px-4 md:px-8 py-4 md:py-5 shadow-md flex flex-col sm:flex-row items-center justify-between shrink-0 gap-3 mb-6">
             <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
               <span className="text-xl font-bold tracking-wider uppercase font-serif">unchaos</span>
@@ -354,17 +343,14 @@
           {/* Master Dashboard Container */}
           <div className="flex-1 max-w-[1450px] mx-auto w-full px-4 md:px-6 space-y-6">
             
-            {/* Main Dashboard Control Matrix (Stacks on Mobile) */}
+            {/* Control Matrix */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
               
-              {/* Date & Week Cycle adjustments (Span 3 on Desktop) */}
               <div className="col-span-1 lg:col-span-3 bg-white border border-sage-200 rounded-xl p-5 shadow-sm hover:border-sage-300 transition duration-200 flex flex-col justify-between">
                 <div>
                   <div className="text-xs font-bold text-sage-800 mb-2 uppercase tracking-wider flex items-center gap-1.5">
                     <span>Active Week Adjustment</span> 🗓
                   </div>
-                  
-                  {/* Custom functional calendar date input */}
                   <input 
                     type="date" 
                     className="w-full bg-sage-50 border border-sage-200 text-sm py-2 px-3 rounded-lg font-mono text-sage-900 outline-none focus:border-sage-600 transition"
@@ -374,7 +360,6 @@
                 </div>
 
                 <div className="mt-4">
-                  {/* Step controls for shifting weeks */}
                   <div className="flex gap-2 mb-3">
                     <button 
                       onClick={handlePrevWeek} 
@@ -392,22 +377,16 @@
 
                   <div className="grid grid-cols-2 gap-2">
                     <button 
-                      onClick={saveToLocal}
-                      className="bg-sage-700 hover:bg-sage-800 text-white font-mono text-xs py-2.5 rounded-lg font-bold shadow-sm flex items-center justify-center gap-1.5 transition touch-manipulation"
-                    >
-                      Save Week 💾
-                    </button>
-                    <button 
                       onClick={handleClear}
-                      className="bg-white hover:bg-sage-50 text-sage-700 border border-sage-300 font-mono text-xs py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-1.5 touch-manipulation"
+                      className="col-span-2 bg-white hover:bg-sage-50 text-sage-700 border border-sage-300 font-mono text-xs py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-1.5 touch-manipulation"
                     >
-                      Reset 🧹
+                      Reset Week 🧹
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Weekly Focus, Reward, Affirmation Inputs (Span 5 on Desktop) */}
+              {/* Weekly Meta Block */}
               <div className="col-span-1 lg:col-span-5 bg-white border border-sage-200 rounded-xl p-5 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4 hover:border-sage-300 transition duration-200">
                 <div className="flex flex-col justify-between">
                   <div className="text-xs font-bold text-sage-800 mb-1.5 uppercase tracking-wider flex items-center gap-1">
@@ -446,20 +425,19 @@
                 </div>
               </div>
 
-              {/* Progress and Visual Meters (Span 4 on Desktop) */}
+              {/* Progress Engines */}
               <div className="col-span-1 lg:col-span-4 bg-white border border-sage-200 rounded-xl p-5 shadow-sm flex items-center justify-between gap-5 hover:border-sage-300 transition duration-200">
                 <div className="flex-1 flex flex-col justify-between h-full">
                   <div className="text-xs font-bold text-sage-800 mb-1 uppercase tracking-wider">
                     Overall Progress
                   </div>
                   
-                  {/* Visual columns showing performance index per day */}
                   <div className="flex items-end justify-between gap-1.5 h-16 mt-2">
                     {DAYS.map((day, i) => {
                       const dayTasks = tasks[day] || [];
                       const pct = dayTasks.length ? Math.round((dayTasks.filter(t => t.done).length / dayTasks.length) * 100) : 0;
                       return (
-                        <div key={day} className="flex-1 flex flex-col items-center justify-end h-full">
+                        <div key={`progress-bar-${day}`} className="flex-1 flex flex-col items-center justify-end h-full">
                           <div className="w-full bg-zinc-100 rounded-md h-full relative overflow-hidden border border-gray-100">
                             <div 
                               className="bg-sage-600 absolute bottom-0 w-full rounded-md transition-all duration-500"
@@ -475,7 +453,6 @@
                   </div>
                 </div>
 
-                {/* Main Target Donut progress indicator */}
                 <div className="flex flex-col items-center justify-center shrink-0 border-l border-gray-100 pl-4 h-full">
                   <div className="relative flex items-center justify-center">
                     <CircularDonut pct={overallProgress} size={74} strokeWidth={6.5} />
@@ -489,7 +466,7 @@
 
             </div>
 
-            {/* Habit Tracker Matrix Section (Horizontal Swipe on Mobile) */}
+            {/* Habit Tracker Matrix */}
             <div className="bg-white border border-sage-200 rounded-xl p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 border-b border-sage-100 pb-3 gap-3">
                 <h3 className="text-sm font-bold text-sage-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -513,14 +490,13 @@
                 </div>
               </div>
 
-              {/* Added horizontal scroll wrapping so columns don't compress on mobile devices */}
               <div className="overflow-x-auto custom-scrollbar -mx-2 px-2">
                 <table className="w-full text-xs text-left border-collapse min-w-[650px] md:min-w-full">
                   <thead>
                     <tr className="bg-sage-100 text-sage-900 uppercase font-mono text-[10px] tracking-wider">
                       <th className="p-3 border-r border-sage-200 rounded-tl-lg">Habit Routine</th>
                       {DAYS.map((day, i) => (
-                        <th key={day} className="p-3 text-center border-r border-sage-200 w-12 sm:w-16">
+                        <th key={`th-${day}`} className="p-3 text-center border-r border-sage-200 w-12 sm:w-16">
                           {DAY_SHORT[i]}
                         </th>
                       ))}
@@ -532,7 +508,7 @@
                       const completedCount = habit.days.filter(Boolean).length;
                       const progressPct = Math.round((completedCount / 7) * 100);
                       return (
-                        <tr key={habit.id} className="hover:bg-sage-50/40 border-b border-sage-100 transition-colors">
+                        <tr key={`habit-row-${habit.id}`} className="hover:bg-sage-50/40 border-b border-sage-100 transition-colors">
                           <td className="p-3 font-medium text-gray-700 border-r border-sage-100 flex items-center justify-between group min-w-[200px]">
                             <span className="truncate max-w-[180px] sm:max-w-none">{habit.name}</span>
                             <button 
@@ -543,7 +519,7 @@
                             </button>
                           </td>
                           {habit.days.map((checked, dayIdx) => (
-                            <td key={dayIdx} className="p-3 text-center border-r border-sage-100">
+                            <td key={`habit-check-${habit.id}-${dayIdx}`} className="p-3 text-center border-r border-sage-100">
                               <div 
                                 onClick={() => handleToggleHabitDay(habit.id, dayIdx)}
                                 className={`w-6 h-6 sm:w-7 sm:h-7 mx-auto rounded border flex items-center justify-center cursor-pointer transition-all touch-manipulation ${
@@ -578,7 +554,7 @@
               </div>
             </div>
 
-            {/* 7-Day Architecture Columns */}
+            {/* 7-Day Matrix Columns */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
               {DAYS.map((day, idx) => {
                 const targetDate = getWeekDate(weekStart, idx);
@@ -590,11 +566,10 @@
 
                 return (
                   <div 
-                    key={day} 
+                    key={`day-card-${day}`} 
                     className="bg-white border border-sage-200 rounded-xl overflow-hidden flex flex-col shadow-sm hover:shadow-md transition duration-200"
                   >
                     
-                    {/* Day Header */}
                     <div className="bg-sage-800 text-white py-3 px-2 text-center relative">
                       <h3 className="font-serif text-[14px] font-bold tracking-wide">
                         {day}
@@ -604,7 +579,6 @@
                       </span>
                     </div>
 
-                    {/* Circular progress display */}
                     <div className="flex flex-col items-center py-4 bg-white border-b border-sage-50 shrink-0">
                       <div className="relative flex items-center justify-center">
                         <CircularDonut pct={pct} size={64} strokeWidth={5.5} />
@@ -612,16 +586,14 @@
                       </div>
                     </div>
 
-                    {/* Tasks layout segment */}
                     <div className="bg-black text-white py-1.5 text-center font-mono text-[9px] uppercase tracking-wider font-bold">
                       Tasks
                     </div>
 
-                    {/* Interactive alternating matrix items */}
                     <div className="flex-1 min-h-[180px] max-h-[300px] overflow-y-auto custom-scrollbar p-2 space-y-1 bg-zinc-50/50">
                       {dayTasks.map((task, taskIdx) => (
                         <div 
-                          key={task.id}
+                          key={`task-${task.id}`}
                           className={`flex items-center justify-between gap-1.5 p-2 rounded border border-sage-100 shadow-sm transition-all group ${
                             taskIdx % 2 === 0 ? 'bg-white' : 'bg-sage-50/30'
                           }`}
@@ -653,7 +625,6 @@
                       ))}
                     </div>
 
-                    {/* Commit inputs */}
                     <div className="p-2 border-t border-sage-100 bg-white">
                       <div className="flex items-center gap-1.5">
                         <input 
@@ -676,7 +647,6 @@
                       </div>
                     </div>
 
-                    {/* Metrics Done/Left Bar Segment */}
                     <div className="p-3 border-t border-sage-100 bg-white space-y-1.5 shrink-0 font-mono text-[9px] font-bold">
                       <div>
                         <div className="flex justify-between items-center mb-0.5 text-sage-900">
